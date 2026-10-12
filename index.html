@@ -1,0 +1,877 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Bichig · ᠪᠢᠴᠢᠭ</title>
+<meta name="description" content="A daily word-guessing game in traditional Mongolian script (Hudum bichig).">
+<meta name="theme-color" content="#fafaf7" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#121214" media="(prefers-color-scheme: dark)">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<link rel="preload" href="fonts/NotoSansMongolian-Regular.woff2" as="font" type="font/woff2" crossorigin>
+<style>
+@font-face {
+  font-family: "Noto Sans Mongolian";
+  src: url("fonts/NotoSansMongolian-Regular.woff2") format("woff2");
+  font-display: block;
+}
+:root {
+  color-scheme: light;
+  --bg: #fafaf7; --fg: #1d1d1f; --muted: #6b6b70; --panel: #ffffff;
+  --border: #d3d6da; --border-strong: #8a8c90; --key: #e1e3e7; --key-fg: #1d1d1f;
+  --correct: #4a8f4f; --present: #c4a12a; --absent: #7b7e82; --on-color: #ffffff;
+  --accent: #2c6db0; --toast-bg: #1d1d1f; --toast-fg: #ffffff; --shadow: 0 10px 30px rgba(0,0,0,.18);
+  --tile: 48px;
+  --mong: "Noto Sans Mongolian", "Mongolian Baiti", "Menk Qagan Tig", sans-serif;
+  --ui: system-ui, -apple-system, "Segoe UI", Roboto, "PingFang SC", "Noto Sans CJK SC", "Microsoft YaHei", sans-serif;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --bg: #121214; --fg: #f2f2f3; --muted: #a2a2a8; --panel: #1d1d21;
+    --border: #3a3a3e; --border-strong: #5f6064; --key: #7d7f84; --key-fg: #ffffff;
+    --correct: #538d4e; --present: #b59f3b; --absent: #3a3a3e;
+    --accent: #6aa6e8; --toast-bg: #f2f2f3; --toast-fg: #121214; --shadow: 0 10px 30px rgba(0,0,0,.6);
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #121214; --fg: #f2f2f3; --muted: #a2a2a8; --panel: #1d1d21;
+  --border: #3a3a3e; --border-strong: #5f6064; --key: #7d7f84; --key-fg: #ffffff;
+  --correct: #538d4e; --present: #b59f3b; --absent: #3a3a3e;
+  --accent: #6aa6e8; --toast-bg: #f2f2f3; --toast-fg: #121214; --shadow: 0 10px 30px rgba(0,0,0,.6);
+}
+:root[data-contrast="high"] { --correct: #f5793a; --present: #3d8fd9; }
+
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; }
+body {
+  background: var(--bg); color: var(--fg); font-family: var(--ui);
+  display: flex; flex-direction: column; min-height: 100dvh; overflow-x: hidden;
+  -webkit-tap-highlight-color: transparent;
+  padding: env(safe-area-inset-top) env(safe-area-inset-right) 0 env(safe-area-inset-left);
+}
+button { font: inherit; color: inherit; }
+.mong { font-family: var(--mong); writing-mode: vertical-lr; text-orientation: mixed; line-height: 1; }
+
+/* ---------------------------------------------------------------- header */
+header {
+  display: flex; align-items: center; justify-content: space-between; gap: 8px;
+  padding: 6px 16px; border-bottom: 1px solid var(--border); min-height: 56px;
+}
+.brand { display: flex; align-items: center; gap: 8px; }
+.brand .mong { font-size: 22px; }
+.brand .latin { font-weight: 700; font-size: 20px; letter-spacing: .02em; }
+.brand .sub { display: block; font-size: 11px; color: var(--muted); font-weight: 400; letter-spacing: 0; }
+.icons { display: flex; gap: 2px; }
+.icon-btn {
+  width: 40px; height: 40px; border: 0; background: none; border-radius: 10px; cursor: pointer;
+  display: grid; place-items: center;
+}
+.icon-btn:hover, .icon-btn:focus-visible { background: var(--key); }
+.icon-btn svg { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+
+.bar { display: flex; align-items: center; justify-content: center; gap: 10px; padding: 8px 16px 0; flex-wrap: wrap; }
+.seg { display: inline-flex; border: 1px solid var(--border-strong); border-radius: 999px; overflow: hidden; }
+.seg button { border: 0; background: none; padding: 5px 14px; cursor: pointer; font-size: 14px; }
+.seg button[aria-pressed="true"] { background: var(--fg); color: var(--bg); }
+.puzzle-label { font-size: 13px; color: var(--muted); }
+
+/* ---------------------------------------------------------------- board */
+main { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 10px 16px 4px; gap: 6px; min-height: 0; }
+#board { display: flex; gap: var(--gap, 6px); justify-content: center; }
+.col { display: flex; flex-direction: column; align-items: center; gap: var(--tgap, 5px); }
+.col.current .tile.filled { border-color: var(--fg); }
+.tile {
+  width: var(--tile); height: var(--tile); border: 2px solid var(--border); border-radius: 6px;
+  display: grid; place-items: center; position: relative; overflow: hidden;
+  background: var(--bg); transition: border-color .1s;
+}
+.tile .g { font-family: var(--mong); writing-mode: vertical-lr; line-height: 1; font-size: calc(var(--tile) * .58); }
+.tile .lat {
+  position: absolute; right: 3px; bottom: 1px; font-size: calc(var(--tile) * .24); line-height: 1.1;
+  font-weight: 600; opacity: .8; display: none;
+}
+.latin-on .tile .lat, .latin-on .key .lat { display: block; }
+.tile.filled { border-color: var(--border-strong); animation: pop .1s ease-out; }
+.tile.correct, .tile.present, .tile.absent { color: var(--on-color); border-color: transparent; }
+.tile.correct { background: var(--correct); }
+.tile.present { background: var(--present); }
+.tile.absent { background: var(--absent); }
+.col.reveal .tile { animation: flip .5s ease-in-out both; animation-delay: calc(var(--i) * 220ms); }
+.col.shake { animation: shake .4s; }
+.col.win .tile { animation: bounce .5s ease both; animation-delay: calc(var(--i) * 90ms + 200ms); }
+@keyframes pop { 50% { transform: scale(1.08); } }
+@keyframes flip { 0% { transform: rotateY(0); } 50% { transform: rotateY(90deg); } 100% { transform: rotateY(0); } }
+@keyframes shake { 20%, 60% { transform: translateY(-5px); } 40%, 80% { transform: translateY(5px); } }
+@keyframes bounce { 40% { transform: translateX(-8px); } 70% { transform: translateX(3px); } }
+@media (prefers-reduced-motion: reduce) {
+  .col.reveal .tile, .col.shake, .col.win .tile, .tile.filled { animation: none; }
+}
+.word {
+  font-family: var(--mong); writing-mode: vertical-lr; line-height: 1; font-size: calc(var(--tile) * .44);
+  height: var(--wordh, 80px); padding-top: 4px; color: var(--fg); white-space: nowrap;
+}
+.col .word.pending { color: var(--muted); }
+
+#below { min-height: 40px; display: flex; flex-direction: column; align-items: center; gap: 6px; width: 100%; max-width: 520px; }
+.hint-btn {
+  border: 1px dashed var(--border-strong); background: none; border-radius: 999px; padding: 5px 14px;
+  cursor: pointer; font-size: 14px;
+}
+.hint { font-size: 15px; text-align: center; }
+.hint .zh { font-size: 17px; }
+.result {
+  display: flex; align-items: center; gap: 14px; background: var(--panel); border: 1px solid var(--border);
+  border-radius: 14px; padding: 10px 14px; box-shadow: var(--shadow); max-width: 100%;
+}
+.result .mong { font-size: 30px; max-height: 120px; }
+.result .info { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.result .title { font-weight: 700; }
+.result .lat { color: var(--muted); font-size: 14px; }
+.result .zh { font-size: 15px; }
+.result .actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 4px; }
+.btn {
+  border: 0; border-radius: 999px; padding: 7px 14px; cursor: pointer; font-weight: 600; font-size: 14px;
+  background: var(--correct); color: var(--on-color);
+}
+.btn.secondary { background: var(--key); color: var(--key-fg); }
+
+/* ---------------------------------------------------------------- keyboard */
+#keyboard {
+  width: 100%; max-width: 520px; margin: 0 auto; padding: 4px 8px calc(8px + env(safe-area-inset-bottom));
+  display: flex; flex-direction: column; gap: 6px; user-select: none;
+}
+#keyboard[hidden] { display: none; }
+.krow { display: flex; gap: 5px; justify-content: center; }
+.key {
+  flex: 1 1 0; min-width: 0; height: var(--keyh, 50px); border: 0; border-radius: 6px; cursor: pointer;
+  background: var(--key); color: var(--key-fg); position: relative;
+  display: grid; place-items: center; padding: 0; touch-action: manipulation;
+}
+.key .g { font-family: var(--mong); writing-mode: vertical-lr; line-height: 1; font-size: calc(var(--keyh, 50px) * .5); }
+.key .lat { position: absolute; bottom: 2px; right: 3px; font-size: 10px; font-weight: 600; display: none; opacity: .85; }
+.key.wide { flex: 1.5 1 0; font-size: 13px; font-weight: 700; }
+.key.wide svg { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.krow.loan .key { height: calc(var(--keyh, 50px) * .72); }
+.krow.loan .key .g { font-size: calc(var(--keyh, 50px) * .36); }
+.krow.loan .key:not(.correct):not(.present):not(.absent) { opacity: .62; }
+.key.correct { background: var(--correct); color: var(--on-color); }
+.key.present { background: var(--present); color: var(--on-color); }
+.key.absent { background: var(--absent); color: var(--on-color); opacity: .75; }
+.key:active { filter: brightness(.9); }
+
+/* ---------------------------------------------------------------- toast & dialogs */
+#toast {
+  position: fixed; left: 50%; top: 74px; transform: translateX(-50%); z-index: 20; pointer-events: none;
+  display: flex; flex-direction: column; gap: 6px; align-items: center; width: max-content; max-width: calc(100vw - 32px);
+}
+.toast {
+  background: var(--toast-bg); color: var(--toast-fg); border-radius: 8px; padding: 9px 14px; font-weight: 600;
+  font-size: 14px; box-shadow: var(--shadow); pointer-events: auto; display: flex; align-items: center; gap: 8px; text-align: center;
+}
+.toast .mong { font-size: 20px; }
+.toast button { border: 0; background: var(--accent); color: #fff; border-radius: 6px; padding: 4px 8px; cursor: pointer; font-weight: 600; }
+dialog {
+  border: 1px solid var(--border); border-radius: 16px; background: var(--panel); color: var(--fg);
+  box-shadow: var(--shadow); padding: 18px 18px 16px; width: min(460px, calc(100vw - 32px));
+  max-height: calc(100dvh - 48px);
+}
+dialog::backdrop { background: rgba(0,0,0,.45); }
+dialog h2 { margin: 0 0 10px; font-size: 19px; }
+dialog h3 { margin: 16px 0 6px; font-size: 15px; }
+dialog p, dialog li { font-size: 14px; line-height: 1.5; }
+dialog ul { padding-left: 18px; margin: 6px 0; }
+dialog .close { position: absolute; top: 10px; right: 10px; }
+.example-wrap { display: flex; gap: 16px; align-items: flex-start; }
+.example-wrap p { margin-top: 0; }
+.example { --tile: 40px; --wordh: 70px; flex: none; }
+.stats-grid { display: grid; grid-template-columns: repeat(4, 1fr); text-align: center; gap: 4px; }
+.stats-grid b { display: block; font-size: 26px; }
+.stats-grid span { font-size: 12px; color: var(--muted); }
+.dist { display: flex; flex-direction: column; gap: 4px; margin-top: 6px; }
+.dist div { display: flex; align-items: center; gap: 6px; font-size: 13px; }
+.dist .barv { background: var(--absent); color: var(--on-color); padding: 1px 6px; border-radius: 3px; min-width: 22px; text-align: right; font-weight: 600; }
+.dist .barv.hl { background: var(--correct); }
+.settings-row { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 10px 0; border-bottom: 1px solid var(--border); }
+.settings-row:last-of-type { border-bottom: 0; }
+.settings-row small { display: block; color: var(--muted); font-size: 12px; }
+.next { text-align: center; margin-top: 12px; font-size: 13px; color: var(--muted); }
+.next b { font-variant-numeric: tabular-nums; color: var(--fg); font-size: 18px; }
+.credits { font-size: 12px; color: var(--muted); line-height: 1.5; }
+.credits a { color: var(--accent); }
+kbd { border: 1px solid var(--border-strong); border-radius: 4px; padding: 0 4px; font-size: 12px; }
+.sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+.loading { padding: 40px; color: var(--muted); }
+</style>
+</head>
+<body>
+<header>
+  <div class="icons">
+    <button class="icon-btn" id="btn-help" aria-label="How to play" title="How to play">
+      <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9.5"/><path d="M9.3 9.2a2.8 2.8 0 0 1 5.4 1c0 1.9-2.7 2.4-2.7 4"/><circle cx="12" cy="17.4" r=".6" fill="currentColor"/></svg>
+    </button>
+  </div>
+  <div class="brand">
+    <span class="mong" lang="mn-Mong" aria-hidden="true">ᠪᠢᠴᠢᠭ</span>
+    <span class="latin">Bichig<span class="sub">Mongolian word game · 蒙古文猜词</span></span>
+  </div>
+  <div class="icons">
+    <button class="icon-btn" id="btn-stats" aria-label="Statistics" title="Statistics">
+      <svg viewBox="0 0 24 24"><path d="M5 20V11M12 20V4M19 20v-6"/></svg>
+    </button>
+    <button class="icon-btn" id="btn-settings" aria-label="Settings" title="Settings">
+      <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>
+    </button>
+  </div>
+</header>
+
+<div class="bar">
+  <div class="seg" role="group" aria-label="Mode">
+    <button id="mode-daily" aria-pressed="true">Daily · 每日</button>
+    <button id="mode-practice" aria-pressed="false">Practice · 练习</button>
+  </div>
+  <span class="puzzle-label" id="puzzle-label"></span>
+</div>
+
+<main>
+  <div id="board" role="grid" aria-label="Guesses, one column per guess, read top to bottom"><div class="loading">Loading…</div></div>
+  <div id="below"></div>
+</main>
+<div id="toast" role="status" aria-live="polite"></div>
+<section id="keyboard" aria-label="Keyboard"></section>
+
+<dialog id="dlg-help" aria-labelledby="help-title">
+  <button class="icon-btn close" data-close aria-label="Close"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+  <h2 id="help-title">How to play · 玩法</h2>
+  <p>Guess the hidden word in 6 tries. Each guess is a <b>column</b>, read top to bottom like traditional Mongolian; columns go left to right. Under each column you see the guess written as a joined word.</p>
+  <div class="example-wrap">
+    <div class="example col" id="ex1" aria-label="Example guess"></div>
+    <div>
+      <p>After each guess the tiles change colour. In this example the guess is <i>hagan</i>, shown as tiles and, below them, as a joined word:</p>
+      <ul>
+        <li><b style="color:var(--correct)">Green</b>: right letter, right position (<i>h</i>).</li>
+        <li><b style="color:var(--present)">Yellow</b>: in the word, but in another position (<i>g</i>). A letter is yellow only as many times as it occurs in the answer.</li>
+        <li><b>Grey</b>: not in the word.</li>
+      </ul>
+    </div>
+  </div>
+  <h3>Look-alike letters</h3>
+  <p>Some letters share a shape in some positions (o/u, ö/ü, t/d, a/e). Turn on <b>Latin labels</b> in settings to see which letter each tile and key is. Answers never look identical to another dictionary word.</p>
+  <h3>Hints and modes</h3>
+  <ul>
+    <li>After your 4th guess you can reveal the Chinese meaning (提示).</li>
+    <li><b>Daily</b>: one word per day, the same for everyone. <b>Practice</b>: unlimited random words.</li>
+    <li>Dimmed keys are loanword letters; they are allowed in guesses but never appear in answers.</li>
+    <li>Word length 4, 5 or 6 can be changed in settings.</li>
+  </ul>
+  <h3>Physical keyboard</h3>
+  <p>Type Mongolian directly, or Latin: <kbd>a e i o u n b p h g m l s t d j y r</kbd>, <kbd>c</kbd>=ch, <kbd>Shift+O</kbd>=ö, <kbd>Shift+U</kbd>=ü, <kbd>Shift+N</kbd>=ng, <kbd>Shift+S</kbd>=sh, <kbd>Enter</kbd>, <kbd>Backspace</kbd>.</p>
+  <h3>Credits</h3>
+  <p class="credits">
+    Words and Chinese meanings from the <a href="https://github.com/csdq777/Lotus" rel="noopener">Lotus</a> dictionary
+    (“Can Large Language Models Translate Unseen Languages in Underrepresented Scripts?”, EMNLP 2025; CC BY-NC 4.0).
+    Word frequencies from <a href="https://github.com/gao1948083886/TM-Bench" rel="noopener">TM-Bench</a> (SIGIR 2026; MIT).
+    Normalization with <a href="https://github.com/Satsrag/mongol-norm" rel="noopener">mongol-norm</a> (MIT).
+    Font: <a href="https://fonts.google.com/noto/specimen/Noto+Sans+Mongolian" rel="noopener">Noto Sans Mongolian</a> (SIL OFL).
+    Free, non-commercial, no tracking; progress is stored only in this browser.
+  </p>
+</dialog>
+
+<dialog id="dlg-stats" aria-labelledby="stats-title">
+  <button class="icon-btn close" data-close aria-label="Close"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+  <h2 id="stats-title">Statistics · 统计</h2>
+  <div id="stats-body"></div>
+</dialog>
+
+<dialog id="dlg-settings" aria-labelledby="settings-title">
+  <button class="icon-btn close" data-close aria-label="Close"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+  <h2 id="settings-title">Settings · 设置</h2>
+  <div class="settings-row">
+    <label for="set-length">Word length<small>Each length has its own daily word</small></label>
+    <div class="seg" role="group" aria-label="Word length" id="set-length">
+      <button data-len="4">4</button><button data-len="5">5</button><button data-len="6">6</button>
+    </div>
+  </div>
+  <div class="settings-row">
+    <label for="set-latin">Latin labels<small>Show transliteration on tiles and keys</small></label>
+    <input type="checkbox" id="set-latin">
+  </div>
+  <div class="settings-row">
+    <label for="set-contrast">High-contrast colours<small>Orange and blue instead of green and yellow</small></label>
+    <input type="checkbox" id="set-contrast">
+  </div>
+  <div class="settings-row">
+    <label for="set-theme">Theme</label>
+    <select id="set-theme">
+      <option value="auto">Auto</option><option value="light">Light</option><option value="dark">Dark</option>
+    </select>
+  </div>
+</dialog>
+
+<script type="module">
+import {
+  ALPHABET, LATIN, LOAN, CORRECT, PRESENT, ABSENT,
+  isLetter, letters, translit, tileStrings, score, keyStates, dateKey, dayNumber, puzzleNumber, dailyIndex,
+  buildIndex, suggest, shareText,
+} from "./core.js";
+
+const MAX_GUESSES = 6;
+const STORE = "bichig:v1:";
+const $ = (s) => document.querySelector(s);
+const el = (tag, cls, text) => {
+  const e = document.createElement(tag);
+  if (cls) e.className = cls;
+  if (text != null) e.textContent = text;
+  return e;
+};
+
+// Per-viewer storage. Every access is guarded: private windows can throw or forget.
+const store = {
+  get(k, fallback) {
+    try { const v = localStorage.getItem(STORE + k); return v == null ? fallback : JSON.parse(v); } catch { return fallback; }
+  },
+  set(k, v) { try { localStorage.setItem(STORE + k, JSON.stringify(v)); } catch { /* storage unavailable */ } },
+};
+
+const settings = Object.assign({ length: 5, latin: false, contrast: false, theme: "auto" }, store.get("settings", {}));
+const dataCache = {};
+let index = null;            // word list for the current length
+let game = null;             // { mode, answer, meaning, guesses, status, hint, date }
+let current = [];            // letters typed in the current column
+let animating = false;
+let revealCol = -1;
+
+// ------------------------------------------------------------------ data
+
+async function loadData(n) {
+  if (!dataCache[n]) {
+    const res = await fetch(`data/words-${n}.json`);
+    if (!res.ok) throw new Error(`data/words-${n}.json: ${res.status}`);
+    dataCache[n] = buildIndex(await res.json());
+  }
+  return dataCache[n];
+}
+
+// ------------------------------------------------------------------ game state
+
+function stateKey(mode, n) { return `${mode}:${n}`; }
+
+function newDaily() {
+  const today = dateKey();
+  const a = index.answers[dailyIndex(today, index.answers.length)];
+  return { mode: "daily", date: today, answer: a.word, meaning: a.meaning, guesses: [], status: "playing", hint: false };
+}
+
+function newPractice() {
+  const a = index.answers[Math.floor(Math.random() * index.answers.length)];
+  return { mode: "practice", answer: a.word, meaning: a.meaning, guesses: [], status: "playing", hint: false };
+}
+
+function restore(mode) {
+  const saved = store.get(stateKey(mode, index.length), null);
+  const valid = saved && index.answers.some((a) => a.word === saved.answer) &&
+    saved.guesses.every((g) => index.allowed.get(letters(g).join("")) === g);
+  if (mode === "daily") return valid && saved.date === dateKey() ? saved : newDaily();
+  return valid ? saved : newPractice();
+}
+
+function save() { store.set(stateKey(game.mode, index.length), game); }
+
+function scores() { return game.guesses.map((g) => score(g, game.answer)); }
+
+// ------------------------------------------------------------------ rendering
+
+function tileEl(glyph, latin, state, i) {
+  const t = el("div", "tile" + (glyph ? " filled" : "") + (state ? " " + state : ""));
+  t.setAttribute("role", "gridcell");
+  t.style.setProperty("--i", i);
+  if (glyph) {
+    const g = el("span", "g", glyph);
+    g.lang = "mn-Mong";
+    t.append(g, el("span", "lat", latin));
+    t.setAttribute("aria-label", `${latin}${state ? ", " + ({ correct: "correct", present: "in word", absent: "not in word" })[state] : ""}`);
+  } else {
+    t.setAttribute("aria-label", "empty");
+  }
+  return t;
+}
+
+function renderBoard() {
+  const n = index.length;
+  const board = $("#board");
+  board.textContent = "";
+  const sc = scores();
+  for (let c = 0; c < MAX_GUESSES; c++) {
+    const col = el("div", "col");
+    col.setAttribute("role", "row");
+    const guess = game.guesses[c];
+    if (guess) {
+      const ls = letters(guess);
+      const tiles = tileStrings(guess, index.tiles[guess]);
+      for (let i = 0; i < n; i++) col.append(tileEl(tiles[i], LATIN[ls[i]], sc[c][i], i));
+      const w = el("div", "word", guess);
+      w.lang = "mn-Mong";
+      col.append(w);
+      if (c === revealCol) col.classList.add("reveal");
+      if (game.status === "won" && c === game.guesses.length - 1 && revealCol < 0) col.classList.add("win");
+    } else if (c === game.guesses.length && game.status === "playing") {
+      col.classList.add("current");
+      const typed = current.join("");
+      const tiles = typed ? tileStrings(typed) : [];
+      for (let i = 0; i < n; i++) col.append(tileEl(tiles[i], current[i] && LATIN[current[i]], null, i));
+      const w = el("div", "word pending", typed);
+      w.lang = "mn-Mong";
+      col.append(w);
+    } else {
+      for (let i = 0; i < n; i++) col.append(tileEl(null, null, null, i));
+      col.append(el("div", "word"));
+    }
+    board.append(col);
+  }
+}
+
+function renderKeyboard() {
+  const kb = $("#keyboard");
+  const states = keyStates(game.guesses, scores());
+  kb.querySelectorAll(".key[data-letter]").forEach((k) => {
+    k.classList.remove(CORRECT, PRESENT, ABSENT);
+    const s = states[k.dataset.letter];
+    if (s) k.classList.add(s);
+  });
+}
+
+function buildKeyboard() {
+  const L = (s) => [...s];
+  const rows = [
+    L("ᠠᠡᠢᠣᠤᠥᠦᠨ"),
+    L("ᠩᠪᠫᠬᠭᠮᠯᠰ"),
+    ["enter", ...L("ᠱᠲᠳᠴᠵᠶᠷ"), "back"],
+    L("ᠧᠸᠹᠺᠻᠼᠽᠾᠿᡀᡁᡂ"),
+  ];
+  const kb = $("#keyboard");
+  kb.textContent = "";
+  rows.forEach((row, ri) => {
+    const r = el("div", "krow" + (ri === 3 ? " loan" : ""));
+    for (const k of row) {
+      const b = el("button", "key");
+      b.type = "button";
+      if (k === "enter") {
+        b.classList.add("wide");
+        b.dataset.action = "enter";
+        b.setAttribute("aria-label", "Enter");
+        b.innerHTML = '<svg viewBox="0 0 24 24"><path d="M20 5v7a3 3 0 0 1-3 3H5M9 11l-4 4 4 4"/></svg>';
+      } else if (k === "back") {
+        b.classList.add("wide");
+        b.dataset.action = "back";
+        b.setAttribute("aria-label", "Backspace");
+        b.innerHTML = '<svg viewBox="0 0 24 24"><path d="M21 5H9l-6 7 6 7h12zM17 9l-6 6M11 9l6 6"/></svg>';
+      } else {
+        b.dataset.letter = k;
+        b.setAttribute("aria-label", LATIN[k] + (LOAN.has(k) ? " (loanword letter)" : ""));
+        const g = el("span", "g", k);
+        g.lang = "mn-Mong";
+        b.append(g, el("span", "lat", LATIN[k]));
+      }
+      r.append(b);
+    }
+    kb.append(r);
+  });
+}
+
+function renderBelow() {
+  const below = $("#below");
+  below.textContent = "";
+  if (game.status !== "playing") {
+    below.append(resultCard());
+    return;
+  }
+  if (game.guesses.length >= 4) {
+    if (game.hint) {
+      const h = el("div", "hint");
+      h.append("Hint · 提示：", el("span", "zh", game.meaning));
+      h.querySelector(".zh").lang = "zh";
+      below.append(h);
+    } else {
+      const b = el("button", "hint-btn", "💡 Show Chinese meaning · 提示");
+      b.id = "hint-btn";
+      b.onclick = () => { game.hint = true; save(); renderBelow(); };
+      below.append(b);
+    }
+  }
+}
+
+function resultCard() {
+  const card = el("div", "result");
+  card.id = "result";
+  const w = el("div", "mong", game.answer);
+  w.lang = "mn-Mong";
+  const info = el("div", "info");
+  const won = game.status === "won";
+  info.append(
+    el("div", "title", won ? ["Genius!", "Magnificent!", "Impressive!", "Splendid!", "Great!", "Phew!"][game.guesses.length - 1] : "The word was"),
+    el("div", "lat", translit(game.answer)),
+  );
+  const zh = el("div", "zh", game.meaning);
+  zh.lang = "zh";
+  info.append(zh);
+  const actions = el("div", "actions");
+  const share = el("button", "btn", "Share · 分享");
+  share.id = "share-btn";
+  share.onclick = () => doShare();
+  actions.append(share);
+  if (game.mode === "practice") {
+    const next = el("button", "btn secondary", "New word · 下一个");
+    next.id = "next-btn";
+    next.onclick = () => { game = newPractice(); current = []; save(); renderAll(); };
+    actions.append(next);
+  } else {
+    const st = el("button", "btn secondary", "Stats");
+    st.onclick = openStats;
+    const pr = el("button", "btn secondary", "Practice · 练习");
+    pr.onclick = () => start("practice");
+    actions.append(st, pr);
+  }
+  info.append(actions);
+  card.append(w, info);
+  return card;
+}
+
+function renderLabel() {
+  const lbl = $("#puzzle-label");
+  lbl.textContent = game.mode === "daily"
+    ? `#${puzzleNumber(game.date)} · ${index.length} letters`
+    : `${index.length} letters`;
+  $("#mode-daily").setAttribute("aria-pressed", String(game.mode === "daily"));
+  $("#mode-practice").setAttribute("aria-pressed", String(game.mode === "practice"));
+}
+
+function renderAll() {
+  layout();
+  $("#keyboard").hidden = game.status !== "playing";
+  renderBoard();
+  renderKeyboard();
+  renderBelow();
+  renderLabel();
+}
+
+// Size tiles to fit the viewport: 6 columns across, N tiles plus the joined word down.
+function layout() {
+  if (!index) return;
+  const n = index.length;
+  const vw = document.documentElement.clientWidth;
+  const vh = window.innerHeight;
+  const gap = vw < 400 ? 5 : 8;
+  const tgap = 5;
+  const headerH = document.querySelector("header").offsetHeight + document.querySelector(".bar").offsetHeight;
+  const keyh = Math.max(40, Math.min(54, Math.round(vh * 0.068)));
+  document.documentElement.style.setProperty("--keyh", keyh + "px");
+  const kbH = keyh * 3 + keyh * 0.72 + 6 * 3 + 14;
+  const belowH = 48;
+  const availW = Math.min(vw - 32, 520);
+  const byW = (availW - gap * (MAX_GUESSES - 1)) / MAX_GUESSES;
+  const wordFactor = 0.44 * (n * 0.62 + 0.4); // joined word height in tiles
+  const availH = vh - headerH - kbH - belowH - 24;
+  const byH = (availH - tgap * (n - 1)) / (n + wordFactor);
+  const tile = Math.max(26, Math.min(62, Math.floor(Math.min(byW, byH))));
+  const root = document.documentElement.style;
+  root.setProperty("--tile", tile + "px");
+  root.setProperty("--gap", gap + "px");
+  root.setProperty("--tgap", tgap + "px");
+  root.setProperty("--wordh", Math.ceil(tile * wordFactor) + "px");
+}
+
+// ------------------------------------------------------------------ toasts
+
+function toast(msg, { ms = 1600, action } = {}) {
+  const t = el("div", "toast");
+  if (typeof msg === "string") t.textContent = msg; else t.append(...msg);
+  if (action) {
+    const b = el("button", null, action.label);
+    b.onclick = () => { action.run(); t.remove(); };
+    t.append(b);
+  }
+  $("#toast").append(t);
+  setTimeout(() => t.remove(), ms);
+}
+
+function shake() {
+  const col = $("#board").children[game.guesses.length];
+  if (!col) return;
+  col.classList.remove("shake");
+  void col.offsetWidth;
+  col.classList.add("shake");
+}
+
+// ------------------------------------------------------------------ input
+
+function addLetter(ch) {
+  if (game.status !== "playing" || animating || current.length >= index.length) return;
+  current.push(ch);
+  renderBoard();
+}
+
+function backspace() {
+  if (game.status !== "playing" || animating || !current.length) return;
+  current.pop();
+  renderBoard();
+}
+
+function submit() {
+  if (game.status !== "playing" || animating) return;
+  const n = index.length;
+  if (current.length < n) {
+    toast("Not enough letters · 字母不够");
+    shake();
+    return;
+  }
+  const word = index.allowed.get(current.join(""));
+  if (!word) {
+    const s = suggest(current, index);
+    if (s) {
+      const m = el("span", "mong", s);
+      m.lang = "mn-Mong";
+      toast(["Not in word list. Did you mean ", m, ` (${translit(s)})?`], {
+        ms: 4000,
+        action: { label: "Use", run: () => { current = letters(s); renderBoard(); } },
+      });
+    } else {
+      toast("Not in word list · 词表中没有");
+    }
+    shake();
+    return;
+  }
+  game.guesses.push(word);
+  current = [];
+  const won = letters(word).join("") === letters(game.answer).join("");
+  if (won) game.status = "won";
+  else if (game.guesses.length >= MAX_GUESSES) game.status = "lost";
+  if (game.status !== "playing" && game.mode === "daily") recordStats();
+  save();
+
+  revealCol = game.guesses.length - 1;
+  const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const delay = reduce ? 0 : n * 220 + 320;
+  animating = delay > 0;
+  renderBoard();
+  setTimeout(() => {
+    animating = false;
+    revealCol = -1;
+    renderKeyboard();
+    renderBelow();
+    if (game.status !== "playing") {
+      $("#keyboard").hidden = true;
+      renderBoard();
+      if (game.mode === "daily") setTimeout(openStats, reduce ? 300 : 1600);
+    }
+  }, delay);
+}
+
+const PHYSICAL = { c: "ᠴ", O: "ᠥ", U: "ᠦ", N: "ᠩ", S: "ᠱ", E: "ᠧ" };
+for (const [ch, lat] of ALPHABET) if (lat.length === 1 && !(lat in PHYSICAL) && /[a-z]/.test(lat)) PHYSICAL[lat] = ch;
+
+document.addEventListener("keydown", (e) => {
+  if (e.ctrlKey || e.metaKey || e.altKey || document.querySelector("dialog[open]")) return;
+  if (e.key === "Enter") { e.preventDefault(); submit(); return; }
+  if (e.key === "Backspace") { e.preventDefault(); backspace(); return; }
+  const ch = e.key.length === 1 && isLetter(e.key) ? e.key : PHYSICAL[e.key];
+  if (ch) { e.preventDefault(); addLetter(ch); }
+});
+
+$("#keyboard").addEventListener("click", (e) => {
+  const k = e.target.closest(".key");
+  if (!k) return;
+  if (k.dataset.letter) addLetter(k.dataset.letter);
+  else if (k.dataset.action === "enter") submit();
+  else if (k.dataset.action === "back") backspace();
+  k.blur();
+});
+
+// ------------------------------------------------------------------ stats & share
+
+function statsFor(n) {
+  return Object.assign({ played: 0, won: 0, streak: 0, maxStreak: 0, dist: [0, 0, 0, 0, 0, 0], lastDay: null, lastWinDay: null },
+    store.get(`stats:${n}`, {}));
+}
+
+function recordStats() {
+  const s = statsFor(index.length);
+  const day = dayNumber(game.date);
+  if (s.lastDay === day) return; // already counted
+  s.played++;
+  s.lastDay = day;
+  if (game.status === "won") {
+    s.won++;
+    s.streak = s.lastWinDay === day - 1 ? s.streak + 1 : 1;
+    s.maxStreak = Math.max(s.maxStreak, s.streak);
+    s.dist[game.guesses.length - 1]++;
+    s.lastWinDay = day;
+  } else {
+    s.streak = 0;
+  }
+  store.set(`stats:${index.length}`, s);
+}
+
+let countdownTimer = null;
+function openStats() {
+  const s = statsFor(index.length);
+  const body = $("#stats-body");
+  body.textContent = "";
+  const grid = el("div", "stats-grid");
+  const item = (v, label) => { const d = el("div"); d.append(el("b", null, String(v)), el("span", null, label)); return d; };
+  // a streak is only current if the last win was today or yesterday
+  const today = dayNumber(dateKey());
+  const streak = s.lastWinDay != null && today - s.lastWinDay <= 1 ? s.streak : 0;
+  grid.append(item(s.played, "Played"), item(s.played ? Math.round((100 * s.won) / s.played) : 0, "Win %"),
+    item(streak, "Streak"), item(s.maxStreak, "Max streak"));
+  body.append(el("p", "puzzle-label", `Daily, ${index.length} letters`), grid, el("h3", null, "Guess distribution"));
+  const dist = el("div", "dist");
+  const max = Math.max(1, ...s.dist);
+  s.dist.forEach((v, i) => {
+    const row = el("div");
+    const bar = el("span", "barv" + (game.mode === "daily" && game.status === "won" && game.guesses.length === i + 1 ? " hl" : ""), String(v));
+    bar.style.width = `${Math.max(8, (92 * v) / max)}%`;
+    row.append(el("span", null, String(i + 1)), bar);
+    dist.append(row);
+  });
+  body.append(dist);
+  const daily = game.mode === "daily" ? game : store.get(stateKey("daily", index.length), null);
+  if (daily && daily.date === dateKey() && daily.status !== "playing") {
+    const next = el("div", "next");
+    const cd = el("b");
+    next.append("Next word in ", cd);
+    const share = el("button", "btn", "Share · 分享");
+    share.style.marginLeft = "10px";
+    share.onclick = () => doShare(daily);
+    next.append(share);
+    body.append(next);
+    const tick = () => {
+      const now = new Date();
+      const mid = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
+      const sec = Math.max(0, Math.floor((mid - now) / 1000));
+      const p = (x) => String(x).padStart(2, "0");
+      cd.textContent = `${p(Math.floor(sec / 3600))}:${p(Math.floor((sec % 3600) / 60))}:${p(sec % 60)}`;
+    };
+    tick();
+    clearInterval(countdownTimer);
+    countdownTimer = setInterval(tick, 1000);
+  }
+  openDialog("#dlg-stats");
+}
+
+async function doShare(g = game) {
+  const sc = g.guesses.map((x) => score(x, g.answer));
+  const url = /^https?:/.test(location.protocol) ? location.origin + location.pathname : undefined;
+  const text = shareText({
+    scores: sc, won: g.status === "won", length: index.length, puzzle: g.mode === "daily" ? puzzleNumber(g.date) : null,
+    practice: g.mode === "practice", hint: g.hint, highContrast: settings.contrast, url,
+  });
+  document.body.dataset.lastShare = text;
+  try {
+    if (navigator.share && matchMedia("(pointer: coarse)").matches) {
+      await navigator.share({ text });
+      return;
+    }
+  } catch { /* cancelled or unsupported: fall back to clipboard */ }
+  try {
+    await navigator.clipboard.writeText(text);
+    toast("Copied to clipboard · 已复制");
+  } catch {
+    toast(text, { ms: 6000 });
+  }
+}
+
+// ------------------------------------------------------------------ dialogs & settings
+
+function openDialog(sel) {
+  const d = $(sel);
+  if (!d.open) d.showModal();
+}
+document.querySelectorAll("dialog").forEach((d) => {
+  d.addEventListener("click", (e) => { if (e.target === d || e.target.closest("[data-close]")) d.close(); });
+  d.addEventListener("close", () => clearInterval(countdownTimer));
+});
+$("#btn-help").onclick = () => { renderExample(); openDialog("#dlg-help"); };
+$("#btn-stats").onclick = openStats;
+$("#btn-settings").onclick = () => { syncSettingsUI(); openDialog("#dlg-settings"); };
+
+function renderExample() {
+  const ex = $("#ex1");
+  ex.textContent = "";
+  const word = "ᠬᠠᠭᠠᠨ"; // hagan
+  const states = [CORRECT, ABSENT, PRESENT, ABSENT, ABSENT];
+  const tiles = tileStrings(word, "00100");
+  letters(word).forEach((c, i) => ex.append(tileEl(tiles[i], LATIN[c], states[i], i)));
+  const w = el("div", "word", word);
+  w.lang = "mn-Mong";
+  ex.append(w);
+}
+
+function applySettings() {
+  const root = document.documentElement;
+  if (settings.theme === "auto") root.removeAttribute("data-theme"); else root.dataset.theme = settings.theme;
+  if (settings.contrast) root.dataset.contrast = "high"; else root.removeAttribute("data-contrast");
+  document.body.classList.toggle("latin-on", settings.latin);
+  store.set("settings", settings);
+}
+
+function syncSettingsUI() {
+  document.querySelectorAll("#set-length button").forEach((b) => b.setAttribute("aria-pressed", String(+b.dataset.len === settings.length)));
+  $("#set-latin").checked = settings.latin;
+  $("#set-contrast").checked = settings.contrast;
+  $("#set-theme").value = settings.theme;
+}
+
+$("#set-length").addEventListener("click", async (e) => {
+  const b = e.target.closest("button[data-len]");
+  if (!b || +b.dataset.len === settings.length || animating) return;
+  settings.length = +b.dataset.len;
+  applySettings();
+  syncSettingsUI();
+  await start(game.mode);
+});
+$("#set-latin").onchange = (e) => { settings.latin = e.target.checked; applySettings(); };
+$("#set-contrast").onchange = (e) => { settings.contrast = e.target.checked; applySettings(); };
+$("#set-theme").onchange = (e) => { settings.theme = e.target.value; applySettings(); };
+
+$("#mode-daily").onclick = () => { if (!animating && game.mode !== "daily") start("daily"); };
+$("#mode-practice").onclick = () => { if (!animating && game.mode !== "practice") start("practice"); };
+
+// ------------------------------------------------------------------ start
+
+async function start(mode) {
+  if (game) save(); // under the length it was played with
+  index = await loadData(settings.length);
+  game = restore(mode);
+  current = [];
+  revealCol = -1;
+  store.set("mode", mode);
+  save();
+  renderAll();
+}
+
+window.addEventListener("resize", () => { layout(); });
+document.addEventListener("visibilitychange", () => {
+  // a new day started while the page was open
+  if (document.visibilityState === "visible" && game && game.mode === "daily" && game.date !== dateKey()) start("daily");
+});
+
+applySettings();
+buildKeyboard();
+start(store.get("mode", "daily") === "practice" ? "practice" : "daily").then(() => {
+  if (!store.get("seenHelp", false)) {
+    store.set("seenHelp", true);
+    renderExample();
+    openDialog("#dlg-help");
+  }
+}).catch((err) => {
+  $("#board").textContent = "Could not load the word list: " + err.message;
+});
+
+if ("serviceWorker" in navigator && /^https?:/.test(location.protocol)) {
+  navigator.serviceWorker.register("sw.js").catch(() => {});
+}
+</script>
+</body>
+</html>
