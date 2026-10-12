@@ -79,7 +79,10 @@ header {
 .puzzle-label { font-size: 13px; color: var(--muted); }
 
 /* ---------------------------------------------------------------- board */
-main { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 10px 16px 4px; gap: 6px; min-height: 0; }
+main { flex: 1; display: flex; flex-direction: column; align-items: center; padding: 10px 16px 4px; gap: 6px; min-height: 0; }
+/* centre vertically, but never push content above the top when it does not fit */
+main > :first-child { margin-top: auto; }
+main > :last-child { margin-bottom: auto; }
 #board { display: flex; gap: var(--gap, 6px); justify-content: center; }
 .col { display: flex; flex-direction: column; align-items: center; gap: var(--tgap, 5px); }
 .col.current .tile.filled { border-color: var(--fg); }
