@@ -1,0 +1,11 @@
+{
+  "name": "Bichig · Mongolian word game",
+  "short_name": "Bichig",
+  "description": "A daily word-guessing game in traditional Mongolian script.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#121214",
+  "theme_color": "#121214",
+  "icons": [{ "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }]
+}
