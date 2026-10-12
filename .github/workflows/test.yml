@@ -1,0 +1,45 @@
+name: Tests
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  wordlist-and-python:
+    name: Word list rebuild + Python tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - run: pip install -r scripts/requirements.txt
+      - name: Rebuild word lists from the pinned sources
+        run: python scripts/build_wordlist.py > /dev/null
+      - name: Committed data matches the rebuild
+        run: git diff --exit-code -- data review
+      - run: python -m pytest -q tests
+
+  javascript:
+    name: JS unit tests + browser end-to-end
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - run: npm ci
+      - run: npm test
+      - run: npx playwright install --with-deps chromium
+      - run: npm run test:e2e
+      - name: Upload screenshots and e2e report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-screenshots
+          path: |
+            docs/screenshots/
+            docs/e2e-report.md

@@ -24,7 +24,9 @@ python3 -m http.server 8080      # or: npm run serve
 # open http://localhost:8080/
 ```
 
-It also works as-is on GitHub Pages (Settings → Pages → deploy from branch, root folder).
+Live version (once GitHub Pages is enabled: Settings → Pages → Deploy from a branch →
+`main`, `/ (root)`): <https://bitmman.github.io/bichig-game/>. The empty `.nojekyll`
+file makes Pages serve the files as they are.
 Opening `index.html` straight from disk (`file://`) does not work because browsers block
 `fetch()` of the word lists there.
 
@@ -180,9 +182,16 @@ Where the brief left room, the simplest option was chosen:
 ```sh
 pip install -r scripts/requirements.txt
 python -m pytest tests          # normalization, letters, word-list invariants, tile forms
+npm ci                          # installs Playwright (dev dependency only)
 npm test                        # core.js: feedback, repeated letters, daily word, sharing
-npm run test:e2e                # headless Chromium; needs the `playwright` package
+npx playwright install chromium
+npm run test:e2e                # headless Chromium
 ```
+
+GitHub Actions (`.github/workflows/test.yml`) runs all of this on every push and pull
+request, and also rebuilds the word lists from the pinned sources and fails if the
+committed `data/` or `review/` files differ. The e2e screenshots and report are
+attached to each run as an artifact.
 
 - `tests/test_mongol_text.py`: U+180E and U+202F suffix forms get the same key; stems
   match the dictionary word; look-alike words collide; letter extraction ignores

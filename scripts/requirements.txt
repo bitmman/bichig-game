@@ -1,5 +1,7 @@
-# Word-list build (scripts/build_wordlist.py) and Python tests
+# Word-list build (scripts/build_wordlist.py) and Python tests.
+# Pinned so a rebuild reproduces data/ byte for byte (CI checks this).
 mongol-norm==0.2.3
-uharfbuzz>=0.40
-fonttools[woff]>=4.50
-pytest>=8
+uharfbuzz==0.56.3
+fonttools==4.66.1
+brotli==1.2.0
+pytest==9.1.1
