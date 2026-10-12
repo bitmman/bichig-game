@@ -1,0 +1,5 @@
+# Word-list build (scripts/build_wordlist.py) and Python tests
+mongol-norm==0.2.3
+uharfbuzz>=0.40
+fonttools[woff]>=4.50
+pytest>=8
