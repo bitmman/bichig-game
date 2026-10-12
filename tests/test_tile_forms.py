@@ -34,14 +34,14 @@ def test_positional_tile_strings():
 def test_mvs_tile_strings():
     us = units("ᠲᠠᠲᠠᠯᠭ" + MVS + "ᠠ")
     # the letter before MVS is final; the vowel after it is drawn after an MVS
-    assert tile_string(us, 5, 0) == ZWJ + "ᠭ" + MVS
+    assert tile_string(us, 5, 0) == ZWJ + "ᠭ"
     assert tile_string(us, 6, 0) == MVS + "ᠠ"
 
 
 def test_fvs_from_spelling_is_kept():
-    us = units("ᠴᠢᠭ᠌")
+    us = units("ᠴᠢᠭ\u180c")
     assert us[2].fvs == 2
-    assert tile_string(us, 2, 2) == ZWJ + "ᠭ᠌"
+    assert tile_string(us, 2, 2) == ZWJ + "ᠭ\u180c"
 
 
 def test_masculine_g_gets_dotted_tile(finder):
@@ -58,3 +58,23 @@ def test_feminine_initial_g_inside_ligature(finder):
     assert all(g is not None for g in glyphs)
     codes, exact = finder.codes("ᠭᠡᠷ")
     assert all(exact)
+
+
+def test_unsupported_fvs_is_a_visible_placeholder(finder):
+    # This is why tiles are compared by ink: an FVS the font does not apply is drawn.
+    assert finder.placeholders(ZWJ + "\u1820\u180f" + ZWJ)
+    assert not finder.placeholders(ZWJ + "\u182d\u180b" + ZWJ)
+    assert not finder.placeholders(MVS + "\u1820")
+
+
+def test_no_tile_in_the_data_draws_a_placeholder(finder):
+    import json
+
+    for n in (4, 5, 6):
+        d = json.loads((ROOT / "data" / f"words-{n}.json").read_text(encoding="utf-8"))
+        for w in d["allowed"]:
+            us = units(w)
+            code = d["tiles"].get(w) or "".join(str(u.fvs) for u in us)
+            for i in range(len(us)):
+                t = tile_string(us, i, int(code[i]))
+                assert not finder.placeholders(t), (w, i, t)

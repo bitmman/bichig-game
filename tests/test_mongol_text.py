@@ -46,10 +46,10 @@ def test_suffix_separator_canonicalized_to_nnbsp():
 def test_mvs_before_final_a_is_kept():
     assert canonicalize_suffix_separators(TATALGA) == TATALGA
     # TM-Bench writes both the vowel separator and the suffix separator as U+180E
-    tm_bench = TATALGA + MVS + "ᠶ᠋ᠢᠨ"
+    tm_bench = TATALGA + MVS + "ᠶ\u180bᠢᠨ"
     stem, suffixes = split_stem(tm_bench)
     assert stem == TATALGA
-    assert suffixes == ["ᠶ᠋ᠢᠨ"]
+    assert suffixes == ["ᠶ\u180bᠢᠨ"]
     assert shape_key(stem) == shape_key(TATALGA)
 
 
@@ -57,7 +57,7 @@ def test_mvs_before_final_a_with_fvs_is_kept():
     word = "ᠬᠡᠵᠢᠶ" + MVS + "ᠡ"
     assert canonicalize_suffix_separators(word) == word
     # a suffix starting with a/e is not a final vowel
-    assert canonicalize_suffix_separators("ᠤᠭᠤᠲᠠ" + MVS + "ᠠ᠋ᠴᠠ") == "ᠤᠭᠤᠲᠠ" + NNBSP + "ᠠ᠋ᠴᠠ"
+    assert canonicalize_suffix_separators("ᠤᠭᠤᠲᠠ" + MVS + "ᠠ\u180bᠴᠠ") == "ᠤᠭᠤᠲᠠ" + NNBSP + "ᠠ\u180bᠴᠠ"
 
 
 def test_stem_from_tm_bench_matches_dictionary_word():
@@ -74,7 +74,7 @@ def test_letters_sharing_a_glyph_collide():
 
 
 def test_tokens_split_on_punctuation_and_spaces():
-    text = "ᠡᠨᠡ ᠨᠢ ᠮᠢᠨᠦ᠂ ᠤᠯᠤᠰ᠎ᠤᠨ abc 中文 ᠃"
+    text = "ᠡᠨᠡ ᠨᠢ ᠮᠢᠨᠦ᠂ ᠤᠯᠤᠰ\u180eᠤᠨ abc 中文 ᠃"
     assert tokens(text) == ["ᠡᠨᠡ", "ᠨᠢ", "ᠮᠢᠨᠦ", ULUS + MVS + GEN_UN]
 
 
@@ -83,7 +83,7 @@ def test_tokens_split_on_punctuation_and_spaces():
 
 def test_letters_exclude_format_characters():
     assert letters(TATALGA) == list("ᠲᠠᠲᠠᠯᠭᠠ")
-    assert letters("ᠴᠢᠭ᠌") == ["ᠴ", "ᠢ", "ᠭ"]  # FVS2 is not a letter
+    assert letters("ᠴᠢᠭ\u180c") == ["ᠴ", "ᠢ", "ᠭ"]  # FVS2 is not a letter
     assert letters(ULUS + NNBSP + GEN_UN) == list("ᠤᠯᠤᠰᠤᠨ")
     assert letters(ZWJ + "ᠤᠤ") == ["ᠤ", "ᠤ"]
 
@@ -99,7 +99,7 @@ def test_translit():
     [
         ("ᠬᠥᠮᠦᠨ", None),
         (TATALGA, None),
-        ("ᠴᠢᠭ᠌", None),
+        ("ᠴᠢᠭ\u180c", None),
         ("", "empty"),
         ("ᠬᠥᠮᠦᠨ ᠪᠣᠯ", "space (multi-word entry)"),
         (ULUS + NNBSP + GEN_UN, "NNBSP suffix part"),
@@ -108,8 +108,8 @@ def test_translit():
         ("ᠤᠯᠤᠰa", "Latin character"),
         ("ᠤᠯᠤᠰ1", "digit"),
         ("ᠤᠯᠤᠰ国", "Chinese character"),
-        ("ᠤᠯᠰ", "private-use character"),
-        ("᠋ᠤᠯᠤᠰ", "stray FVS"),
+        ("ᠤᠯ\ue25aᠰ", "private-use character"),
+        ("\u180bᠤᠯᠤᠰ", "stray FVS"),
         (MVS + "ᠠ", "MVS suffix part"),
         ("ᠤᠯᡃᠰ", "Todo/Sibe/Manchu letter"),
         ("ᠤᠯᠤᠰ᠂", "Mongolian punctuation or digit"),
@@ -125,7 +125,7 @@ def test_invalid_reason(word, reason):
 def test_count_frequencies_merges_encodings(tmp_path):
     data = [
         {"text": f"{ULUS} {ULUS}{MVS}{GEN_UN} ᠣᠯᠣᠰ᠃", "label": 1},
-        {"nested": {"choices": [f"{TATALGA}{MVS}ᠶ᠋ᠢᠨ", "国家", f"{MVS}ᠤ᠋"]}},
+        {"nested": {"choices": [f"{TATALGA}{MVS}ᠶ\u180bᠢᠨ", "国家", f"{MVS}ᠤ\u180b"]}},
     ]
     p = tmp_path / "x.json"
     p.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")

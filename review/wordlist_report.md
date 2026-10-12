@@ -20,6 +20,7 @@ TM-Bench tokens not counted (stem is not a valid single word):
 
 - valid single words: 15012
 - dropped, ZWJ/ZWNJ (suffix or fragment entry): 2 (e.g. `'\u200dᠤᠤ'`, `'\u200dᠦᠦ'`)
+- spellings with an FVS that Noto Sans Mongolian cannot draw (shown as a dotted box): 7; kept as guesses without that FVS, never answers (e.g. `'ᠪᠢᠯᠧᠲ᠋'`, `'ᠺᠠᠷᠲ᠋'`, `'ᠪᠠᠯᠧᠲ᠋'`)
 
 ## Per word length
 
@@ -57,13 +58,14 @@ TM-Bench tokens not counted (stem is not a valid single word):
 
 - dictionary words with 6 letters: 2235
 - allowed guesses (distinct letter strings): 2235
-- answer candidates after filtering: 918
-- answers: **918** (TM-Bench frequency 2–3183)
+- answer candidates after filtering: 917
+- answers: **917** (TM-Bench frequency 2–3183)
 - dropped from the answer list (each word counted under the first reason that applies):
   - not found in TM-Bench (frequency 0): 1025
   - TM-Bench frequency below 2: 176
   - glyph collision with another dictionary word: 73
   - loanword letter (ē, w, f, k, kh, ts, z, ...): 43
+  - spelling has an FVS the font cannot draw: 1
   - below the top-N frequency cutoff: 0
 
 ## Tile forms

@@ -6,7 +6,7 @@ Terminology used throughout the project:
 * FVS         -- free variation selectors U+180B..U+180D and U+180F. They pick a glyph
                  variant of the preceding letter; they are part of the spelling but not letters.
 * MVS         -- U+180E MONGOLIAN VOWEL SEPARATOR. Standard orthography uses it only
-                 before a word-final a/e (e.g. ᠲᠠᠲᠠᠯᠭ᠎ᠠ). TM-Bench also uses it before
+                 before a word-final a/e (e.g. ᠲᠠᠲᠠᠯᠭ\u180eᠠ). TM-Bench also uses it before
                  every suffix, where the standard character is U+202F (NNBSP).
 * NNBSP       -- U+202F, the standard separator between a stem and a suffix.
 * shape key   -- mongol-norm's ``MongolianShaper.normalize`` output. Two strings with the
@@ -23,37 +23,37 @@ from functools import lru_cache
 LETTER_FIRST = 0x1820
 LETTER_LAST = 0x1842
 
-FVS = frozenset("᠋᠌᠍᠏")
-FVS_BY_INDEX = {1: "᠋", 2: "᠌", 3: "᠍", 4: "᠏"}
+FVS = frozenset("\u180b\u180c\u180d\u180f")
+FVS_BY_INDEX = {1: "\u180b", 2: "\u180c", 3: "\u180d", 4: "\u180f"}
 INDEX_BY_FVS = {v: k for k, v in FVS_BY_INDEX.items()}
-MVS = "᠎"
-NNBSP = " "
-ZWJ = "‍"
-ZWNJ = "‌"
-A, E = "ᠠ", "ᠡ"
+MVS = "\u180e"
+NNBSP = "\u202f"
+ZWJ = "\u200d"
+ZWNJ = "\u200c"
+A, E = "\u1820", "\u1821"
 
 # Latin transliteration shown on tiles and keys. A simple, readable scheme close to the
 # common Inner Mongolian / MNS romanisation: one Latin label per Unicode letter, so the
 # labels disambiguate letters that share a glyph (o/u, ö/ü, t/d, ...).
 TRANSLIT = {
-    "ᠠ": "a", "ᠡ": "e", "ᠢ": "i", "ᠣ": "o", "ᠤ": "u",
-    "ᠥ": "ö", "ᠦ": "ü", "ᠧ": "ē", "ᠨ": "n", "ᠩ": "ng",
-    "ᠪ": "b", "ᠫ": "p", "ᠬ": "h", "ᠭ": "g", "ᠮ": "m",
-    "ᠯ": "l", "ᠰ": "s", "ᠱ": "sh", "ᠲ": "t", "ᠳ": "d",
-    "ᠴ": "ch", "ᠵ": "j", "ᠶ": "y", "ᠷ": "r", "ᠸ": "w",
-    "ᠹ": "f", "ᠺ": "k", "ᠻ": "kh", "ᠼ": "ts", "ᠽ": "z",
-    "ᠾ": "hh", "ᠿ": "zr", "ᡀ": "lh", "ᡁ": "zh", "ᡂ": "chi",
+    "\u1820": "a", "\u1821": "e", "\u1822": "i", "\u1823": "o", "\u1824": "u",
+    "\u1825": "ö", "\u1826": "ü", "\u1827": "ē", "\u1828": "n", "\u1829": "ng",
+    "\u182a": "b", "\u182b": "p", "\u182c": "h", "\u182d": "g", "\u182e": "m",
+    "\u182f": "l", "\u1830": "s", "\u1831": "sh", "\u1832": "t", "\u1833": "d",
+    "\u1834": "ch", "\u1835": "j", "\u1836": "y", "\u1837": "r", "\u1838": "w",
+    "\u1839": "f", "\u183a": "k", "\u183b": "kh", "\u183c": "ts", "\u183d": "z",
+    "\u183e": "hh", "\u183f": "zr", "\u1840": "lh", "\u1841": "zh", "\u1842": "chi",
 }
 assert len(TRANSLIT) == LETTER_LAST - LETTER_FIRST + 1
 
 # Letters used (almost) only in loanwords from Tibetan, Sanskrit, Chinese or Russian.
 # Words containing them are valid guesses but are not picked as answers.
-LOAN_LETTERS = frozenset("ᠧ") | frozenset(chr(c) for c in range(0x1838, LETTER_LAST + 1))
+LOAN_LETTERS = frozenset("\u1827") | frozenset(chr(c) for c in range(0x1838, LETTER_LAST + 1))
 
 # A run of characters that can belong to one Mongolian word in running text. Private-use
 # characters are included on purpose so a token containing them is rejected as a whole
 # instead of being split into plausible-looking fragments.
-TOKEN_RE = re.compile("[ᠠ-ᢪ᠋-᠏ ‌‍-]+")
+TOKEN_RE = re.compile("[\u1820-\u18aa\u180b-\u180f\u202f\u200c\u200d\ue000-\uf8ff]+")
 
 
 def is_letter(ch: str) -> bool:
@@ -87,8 +87,8 @@ def _mvs_is_vowel_separator(text: str, i: int) -> bool:
 def canonicalize_suffix_separators(token: str) -> str:
     """Rewrite TM-Bench style suffix separators (U+180E) to the standard U+202F.
 
-    MVS before a word-final a/e is kept, so ``ᠲᠠᠲᠠᠯᠭ᠎ᠠ᠎ᠶ᠋ᠢᠨ`` becomes
-    ``ᠲᠠᠲᠠᠯᠭ᠎ᠠ`` + NNBSP + ``ᠶ᠋ᠢᠨ``. Text already using NNBSP is returned unchanged.
+    MVS before a word-final a/e is kept, so ``ᠲᠠᠲᠠᠯᠭ\u180eᠠ\u180eᠶ\u180bᠢᠨ`` becomes
+    ``ᠲᠠᠲᠠᠯᠭ\u180eᠠ`` + NNBSP + ``ᠶ\u180bᠢᠨ``. Text already using NNBSP is returned unchanged.
     """
     if MVS not in token:
         return token

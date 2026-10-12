@@ -25,10 +25,6 @@ from fontTools.ttLib import TTFont
 
 from mongol_text import FVS, FVS_BY_INDEX, INDEX_BY_FVS, MVS, ZWJ, is_letter
 
-# Glyphs that carry no ink and only mark invisible format characters.
-_MARKER_PREFIXES = ("fvs", "mvs", "space", "zwj", "zwnj", "nnbsp", "uni200D", "uni180")
-
-
 @dataclass
 class Unit:
     letter: str
@@ -62,7 +58,8 @@ def tile_string(us: list[Unit], i: int, fvs: int) -> str:
     s += ZWJ if joins_prev else ""
     s += u.letter + (FVS_BY_INDEX[fvs] if fvs else "")
     s += ZWJ if joins_next else ""
-    s += MVS if i < len(us) - 1 and us[i + 1].mvs_before else ""
+    # No trailing MVS for the letter before it: without a following a/e the font draws
+    # MVS as a visible placeholder box. The letter alone in final form is used instead.
     return s
 
 
@@ -116,13 +113,22 @@ class TileFormFinder:
         hb.shape(self.font, buf, {})
         return [(self.glyph_order[g.codepoint], g.cluster) for g in buf.glyph_infos]
 
-    @staticmethod
-    def _inked(names: list[str]) -> list[str]:
-        return [n for n in names if not n.startswith(_MARKER_PREFIXES)]
+    def _inked(self, names: list[str]) -> list[str]:
+        """Glyphs that draw something (format characters map to empty glyphs)."""
+        return [n for n in names if self.looks(n)[1] != "[]"]
+
+    def placeholders(self, text: str) -> list[str]:
+        """Visible glyphs drawn for format characters (an FVS or MVS the font does not
+        apply in that context is drawn as a dotted box)."""
+        return [n for n in self._inked([n for n, _ in self._shape(text)])
+                if n.startswith(("fvs", "mvs", "uni180", "uni200", "uni202"))]
 
     @lru_cache(maxsize=None)
-    def _tile_glyphs(self, text: str, letter_index: int) -> tuple[str, ...]:
-        return tuple(self._inked([n for n, c in self._shape(text) if c == letter_index]))
+    def _tile_glyphs(self, text: str) -> tuple[str, ...]:
+        # Every inked glyph of the tile string counts, so a format character that the
+        # font draws as a visible placeholder (e.g. an FVS it does not support in that
+        # position) makes the candidate fail instead of being ignored.
+        return tuple(self._inked([n for n, _ in self._shape(text)]))
 
     def word_glyphs(self, word: str) -> list[tuple[str, ...] | None]:
         """Per letter, the glyphs it is drawn with in ``word`` (None if undecidable)."""
@@ -163,12 +169,16 @@ class TileFormFinder:
             chosen = None
             if target is not None:
                 for fvs in dict.fromkeys([u.fvs, 0, 1, 2, 3, 4]):
-                    text = tile_string(us, i, fvs)
-                    li = text.index(u.letter)
-                    got = self._tile_glyphs(text, li)
+                    got = self._tile_glyphs(tile_string(us, i, fvs))
                     if [self.looks(g) for g in got] == [self.looks(g) for g in target]:
                         chosen = fvs
                         break
-            codes.append(u.fvs if chosen is None else chosen)
-            exact.append(chosen is not None)
+            if chosen is None:
+                # No exact match: the plain positional form, keeping the spelling's FVS
+                # only if the font draws it without a placeholder.
+                chosen = next(f for f in (u.fvs, 0) if f == 0 or not self.placeholders(tile_string(us, i, f)))
+                exact.append(False)
+            else:
+                exact.append(True)
+            codes.append(chosen)
         return codes, exact

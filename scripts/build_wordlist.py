@@ -139,7 +139,7 @@ def count_frequencies(paths: list[Path]) -> tuple[collections.Counter, FreqStats
     """Stem frequencies over all text fields of TM-Bench, keyed by mongol-norm shape key.
 
     TM-Bench separates suffixes with U+180E; those are rewritten to U+202F first so that
-    the stem can be split off (``ᠤᠯᠤᠰ᠎ᠤᠨ`` counts for ``ᠤᠯᠤᠰ``). MVS before a final a/e
+    the stem can be split off (``ᠤᠯᠤᠰ\u180eᠤᠨ`` counts for ``ᠤᠯᠤᠰ``). MVS before a final a/e
     stays part of the stem, as in Lotus.
     """
     counts: collections.Counter = collections.Counter()
@@ -152,7 +152,7 @@ def count_frequencies(paths: list[Path]) -> tuple[collections.Counter, FreqStats
                 stem, suffixes = split_stem(tok)
                 if suffixes:
                     st.tokens_with_suffix += 1
-                    if "᠎" in tok and " " not in tok:
+                    if "\u180e" in tok and "\u202f" not in tok:
                         st.tokens_with_mvs_suffix += 1
                 reason = invalid_reason(stem) if stem else "suffix written as a separate token"
                 if reason:
@@ -174,6 +174,8 @@ class Word:
     freq: int
     meanings: list[str]
     order: int  # position in the dictionary file (stable tie-breaker)
+    display: str = ""  # spelling used in the game (``word`` minus FVS the font cannot draw)
+    placeholder: bool = False  # ``word`` draws a placeholder box in the font
 
 
 def chinese_word_counts(texts: list[str], vocab: set[str]) -> collections.Counter:
@@ -265,6 +267,22 @@ def main() -> None:
         key = shape_key(w)
         valid.append(Word(w, "".join(letters(w)), key, freq.get(key, 0), meanings[w], i))
 
+    from tile_forms import TileFormFinder, units  # needs uharfbuzz + fontTools
+
+    tiles = TileFormFinder(str(FONT))
+    # Some Lotus spellings carry an FVS that the font does not support in that position,
+    # so the word itself would show a dotted placeholder box. Such words are not used as
+    # answers; as guesses they are shown without the unsupported FVS.
+    display_fixed = []
+    for w in valid:
+        w.display = w.word
+        if tiles.placeholders(w.word):
+            w.placeholder = True
+            fixed = "".join(c for c in w.word if c not in FVS)
+            if not tiles.placeholders(fixed):
+                w.display = fixed
+                display_fixed.append(w)
+
     by_key: dict[str, list[Word]] = collections.defaultdict(list)
     by_letters: dict[str, list[Word]] = collections.defaultdict(list)
     for w in valid:
@@ -279,10 +297,6 @@ def main() -> None:
         """Same letters, but another spelling (FVS/MVS) that renders differently."""
         return any(o.key != w.key for o in by_letters[w.letters])
 
-    from tile_forms import TileFormFinder, units  # needs uharfbuzz + fontTools
-
-    tiles = TileFormFinder(str(FONT))
-
     args.out.mkdir(parents=True, exist_ok=True)
     args.review.mkdir(parents=True, exist_ok=True)
     report_rows = []
@@ -294,7 +308,7 @@ def main() -> None:
         same_len = [w for w in valid if len(w.letters) == L]
         # One spelling per letter string for guesses: the most frequent, then the simplest.
         allowed: dict[str, Word] = {}
-        for w in sorted(same_len, key=lambda w: (-w.freq, sum(c in FVS for c in w.word), "᠎" in w.word, w.order)):
+        for w in sorted(same_len, key=lambda w: (-w.freq, sum(c in FVS for c in w.word), "\u180e" in w.word, w.order)):
             allowed.setdefault(w.letters, w)
 
         drops: collections.Counter = collections.Counter()
@@ -307,6 +321,8 @@ def main() -> None:
             seen_letters.add(w.letters)
             if set(w.letters) & LOAN_LETTERS:
                 drops["loanword letter (ē, w, f, k, kh, ts, z, ...)"] += 1
+            elif w.placeholder:
+                drops["spelling has an FVS the font cannot draw"] += 1
             elif collision_partners(w):
                 drops["glyph collision with another dictionary word"] += 1
                 if len(collision_examples) < 40:
@@ -327,12 +343,12 @@ def main() -> None:
         # ---- tile FVS codes for every allowed word (answers are always allowed words)
         codes: dict[str, str] = {}
         for w in allowed.values():
-            cs, exact = tiles.codes(w.word)
-            us = units(w.word)
+            cs, exact = tiles.codes(w.display)
+            us = units(w.display)
             tile_stats["letters"] += len(cs)
             tile_stats["approximate"] += exact.count(False)
             if any(c != u.fvs for c, u in zip(cs, us)):
-                codes[w.word] = "".join(map(str, cs))
+                codes[w.display] = "".join(map(str, cs))
 
         ordered = daily_order(answers, L)
         rank = {w.letters: i + 1 for i, w in enumerate(answers)}
@@ -344,7 +360,7 @@ def main() -> None:
                 "mongol_norm": shaper_version(),
             },
             "answers": [[w.word, pick_meanings(w.word, w.meanings, zh_counts, zh_to_mn)] for w in ordered],
-            "allowed": sorted(w.word for w in allowed.values()),
+            "allowed": sorted(w.display for w in allowed.values()),
             "tiles": dict(sorted(codes.items())),
         }
         (args.out / f"words-{L}.json").write_text(
@@ -393,6 +409,12 @@ def write_report(path: Path, v: dict) -> None:
     for r, n in v["dict_invalid"].most_common():
         ex = ", ".join(f"`{e!r}`" for e in v["dict_invalid_examples"][r])
         lines.append(f"- dropped, {r}: {n} (e.g. {ex})")
+    fixed = v["display_fixed"]
+    lines.append(
+        f"- spellings with an FVS that Noto Sans Mongolian cannot draw (shown as a dotted box): "
+        f"{sum(w.placeholder for w in v['valid'])}; kept as guesses without that FVS, never answers"
+        + (f" (e.g. {', '.join(f'`{w.word!r}`' for w in fixed[:3])})" if fixed else "")
+    )
     lines += ["", "## Per word length", ""]
     for L, n_dict, n_allowed, n_cand, n_ans, drops, fmin, fmax in v["report_rows"]:
         lines += [
